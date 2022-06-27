@@ -7,7 +7,7 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const _ = require("lodash");
 const mongoose= require("mongoose");
-const encrypt= require("mongoose-encryption");
+const md5=require("md5"); // a hashing function
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -21,12 +21,6 @@ const userschema=new mongoose.Schema({
   password: String
 });
 
-//storing secreat message and attaching it to password of the schema 
-//so that password is stored as some encrypted string in the database 
-//const secret="Encryption will took place with the help of this random text";
-//calling SECRET from .env file
-//.env file should not be committed on git for which we use gitignore on which copypaste template from github for nodejs
-userschema.plugin(encrypt,{secret: process.env.SECRET, encryptedFields:["password"]});
 
 const User=mongoose.model("User",userschema);
 
@@ -38,7 +32,7 @@ app.get("/login", function(req, res){
 });
 app.post("/login",function(req,res){
   const username=req.body.username;
-  const password=req.body.password;
+  const password=md5(req.body.password);//converting it to hash to comapared with the hashed password
   User.findOne({name : username}, function(err,founduser){
     if(err)
       console.log(err);
@@ -48,7 +42,7 @@ app.post("/login",function(req,res){
           res.render("secrets");
         }
         else
-          console.log("Incorrect password");
+          console.log("ur pass:" + password +" db pass:"+founduser.email);
       }
     }
   })
@@ -59,7 +53,7 @@ app.get("/register", function(req, res){
 app.post("/register", function(req,res){
   const newuser= new User({
     email:req.body.username,
-    password:req.body.password
+    password:md5(req.body.password) //storing a hashed value
   });
   newuser.save(function(err){
     if(!err)
