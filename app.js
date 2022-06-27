@@ -10,6 +10,9 @@ const mongoose= require("mongoose");
 const session = require('express-session');
 const passport=require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require('passport-google-oauth20').Strategy;//we are going to use it as a passport strategy
+const findOrCreate = require('mongoose-findorcreate');
+
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -33,10 +36,13 @@ var connection = mongoose.connection;
 
 const userschema=new mongoose.Schema({
   email:String,
-  password: String
+  password: String,
+  googleId: String,
+  secret: String
 });
-//enabling passportlocalmongoose as a plugin for schema
+//enabling passportlocalmongoose and finorcreate as a plugin for schema
 userschema.plugin(passportLocalMongoose);
+userschema.plugin(findOrCreate);
 
 const User=mongoose.model("User",userschema);
 
@@ -45,13 +51,74 @@ const User=mongoose.model("User",userschema);
 passport.use(User.createStrategy());
 //serialise-- creating cookies and binding info into it
 //deserialise-- breaking cookies and extracting all info
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function (err, user) {
+    done(err, user);
+  });
+});
+
+//exact below the above line
+passport.use(new GoogleStrategy({
+  clientID: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/google/secrets",
+  //to avoid deprication warning
+  userProfileURL : "https://www.googleapis.com/oauth2/v3/userinfo"
+},
+function(accessToken, refreshToken, profile, cb) {
+  User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    return cb(err, user);
+  });
+}
+));
+
+//////////all gets//////////////////|
 app.get("/", function(req, res){
   res.render("home");
 });
+//using passport to authenticate from google 
+app.get('/auth/google',
+  passport.authenticate('google', { scope: ['profile'] }));
 
-//////////all gets//////////////////
+//after authentication google will redirect to "callbackURL"
+app.get('/auth/google/secrets', 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect to secret page where authentication will happen and if false will be redirected to login.
+    res.redirect('/secrets');
+  });
+
+app.get("/submit",function(req,res){
+  if(req.isAuthenticated()){
+    res.render("submit");
+  }
+  else{
+    res.render("login");
+  }
+});
+app.post("/submit",function(req,res){
+  const submittedsecret= req.body.secret;
+  User.findById(req.user.id, function(err, founduser){
+    if(err)
+      console.log(err);
+    else{
+      if(founduser){
+        founduser.secret= submittedsecret;
+        founduser.save(function(err){
+          if(!err)
+            res.redirect("/secrets");
+          else{
+            console.log(err);
+          }
+        })
+      }
+    }
+  })
+});
+
 app.get("/login", function(req, res){
   res.render("login");
 });
@@ -73,7 +140,18 @@ app.post("/login",function(req,res){
     }
   }); 
 })
+
 app.get("/secrets", function(req,res){
+  User.find({"secret":{$ne :null}}, function(err, foundusers){
+    if(err)
+      console.log(err)
+    else{
+      if(foundusers){
+        res.render("secrets", {userswithsecrets: foundusers});
+      }
+    }
+  })
+  /*
   //if the request is authenticated then only open secrets else redirect to login page
   //authenticated means if are logged in then the session will save a cookie of user 
   //and we can use this until we are logged in to see directly secret page without being able to login again
@@ -82,6 +160,7 @@ app.get("/secrets", function(req,res){
     res.render("secrets");
   else
     res.redirect("/login");
+    */
 });
 
 app.get("/register", function(req, res){
