@@ -1,6 +1,7 @@
 //jshint esversion:6
-//jshint esversion:6
-
+//.dotenv must be added on top and it need no variable to store
+//creating a .env file now that will contain the variables that we wanted to encrypt by obeying its naming convention
+require('dotenv').config()
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
@@ -22,8 +23,10 @@ const userschema=new mongoose.Schema({
 
 //storing secreat message and attaching it to password of the schema 
 //so that password is stored as some encrypted string in the database 
-const secret="Encryption will took place with the help of this random text";
-userschema.plugin(encrypt,{secret: secret, encryptedFields:["password"]});
+//const secret="Encryption will took place with the help of this random text";
+//calling SECRET from .env file
+//.env file should not be committed on git for which we use gitignore on which copypaste template from github for nodejs
+userschema.plugin(encrypt,{secret: process.env.SECRET, encryptedFields:["password"]});
 
 const User=mongoose.model("User",userschema);
 
